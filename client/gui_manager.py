@@ -660,6 +660,9 @@ class ScreenShareFrame(ModuleFrame):
             self._safe_label_update(self.sharing_status, text="You are sharing", foreground='green')
             self.screen_label.pack_forget()
             self.screen_canvas.pack(fill='both', expand=True)
+            
+            # Show preview message for local screen sharing
+            self._show_local_sharing_preview()
         else:
             self._safe_button_update(self.share_button, text="Start Screen Share", state='normal')
             # Reset status to "Ready to share" when screen sharing stops
@@ -910,6 +913,138 @@ class ScreenShareFrame(ModuleFrame):
         """Store current frame data for rescaling when canvas size changes."""
         self.current_frame_data = frame_data
         self.current_presenter = presenter_name
+    
+    def _show_local_sharing_preview(self):
+        """Show preview message when you are sharing your screen."""
+        try:
+            # Clear canvas and show preview message
+            self.screen_canvas.delete("all")
+            self.screen_canvas.config(bg='#1a1a1a')  # Dark gray background
+            
+            # Get canvas dimensions
+            canvas_width = self.screen_canvas.winfo_width()
+            canvas_height = self.screen_canvas.winfo_height()
+            
+            # Use fallback dimensions if canvas is not ready
+            if canvas_width <= 10 or canvas_height <= 10:
+                canvas_width = 600
+                canvas_height = 400
+            
+            # Show "You are sharing" message in center
+            center_x = canvas_width // 2
+            center_y = canvas_height // 2
+            
+            # Main message
+            self.screen_canvas.create_text(
+                center_x, center_y - 40,
+                text="🖥️ You are sharing your screen",
+                fill="#00ff00",  # Green color
+                font=("Arial", 16, "bold"),
+                anchor="center"
+            )
+            
+            # Subtitle
+            self.screen_canvas.create_text(
+                center_x, center_y + 10,
+                text="Other participants can see your screen",
+                fill="#ffffff",  # White color
+                font=("Arial", 12),
+                anchor="center"
+            )
+            
+            # Status indicator
+            self.screen_canvas.create_text(
+                center_x, center_y + 40,
+                text="● LIVE",
+                fill="#ff4444",  # Red color for live indicator
+                font=("Arial", 10, "bold"),
+                anchor="center"
+            )
+            
+            logger.info("Displaying local screen sharing preview")
+            
+        except Exception as e:
+            logger.error(f"Error showing local sharing preview: {e}")
+    
+    def display_local_screen_preview(self, frame_data):
+        """Display a preview of your own screen when sharing."""
+        try:
+            if not self.is_sharing:
+                return  # Only show preview when actively sharing
+                
+            import io
+            from PIL import Image, ImageTk
+            
+            # Convert frame data to PIL Image
+            image = Image.open(io.BytesIO(frame_data))
+            
+            # Ensure canvas is visible
+            if not self.screen_canvas.winfo_viewable():
+                self.screen_label.pack_forget()
+                self.screen_canvas.pack(fill='both', expand=True)
+            
+            # Force canvas to update its size
+            self.screen_canvas.update_idletasks()
+            
+            # Get canvas dimensions with fallback values
+            canvas_width = self.screen_canvas.winfo_width()
+            canvas_height = self.screen_canvas.winfo_height()
+            
+            if canvas_width <= 10 or canvas_height <= 10:
+                canvas_width = 600
+                canvas_height = 400
+            
+            # Calculate scaling to fit canvas while maintaining aspect ratio
+            img_width, img_height = image.size
+            if img_width <= 0 or img_height <= 0:
+                return
+            
+            scale_w = canvas_width / img_width
+            scale_h = canvas_height / img_height
+            scale = min(scale_w, scale_h) * 0.9  # Use 90% to leave some margin
+            
+            # Calculate new dimensions
+            new_width = int(img_width * scale)
+            new_height = int(img_height * scale)
+            
+            # Resize image
+            image = image.resize((new_width, new_height), Image.LANCZOS)
+            
+            # Convert to PhotoImage
+            photo = ImageTk.PhotoImage(image)
+            
+            # Clear canvas and display image
+            self.screen_canvas.delete("all")
+            
+            # Center the image
+            x = (canvas_width - new_width) // 2
+            y = (canvas_height - new_height) // 2
+            
+            # Create image on canvas
+            self.screen_canvas.create_image(x, y, anchor='nw', image=photo)
+            
+            # Add "SHARING" overlay in top-right corner
+            self.screen_canvas.create_rectangle(
+                canvas_width - 120, 10, canvas_width - 10, 40,
+                fill="#ff4444", outline="#ff4444"
+            )
+            self.screen_canvas.create_text(
+                canvas_width - 65, 25,
+                text="● SHARING",
+                fill="white",
+                font=("Arial", 10, "bold"),
+                anchor="center"
+            )
+            
+            # Keep reference to prevent garbage collection
+            self.screen_canvas.image = photo
+            
+            logger.debug("Local screen preview updated")
+            
+        except Exception as e:
+            logger.error(f"Error displaying local screen preview: {e}")
+            # Fallback to preview message
+            self._show_local_sharing_preview()
     
     def handle_presenter_granted(self):
         """Handle presenter role being granted with enhanced feedback."""
@@ -1909,6 +2044,11 @@ class TabbedGUIManager:
         """Safely cleanup GUI elements to prevent tkinter errors."""
         if self.screen_share_frame:
             self.screen_share_frame.cleanup_gui_elements()
+    
+    def display_local_screen_preview(self, frame_data):
+        """Display a preview of your own screen when sharing."""
+        if self.screen_share_frame:
+            self.screen_share_frame.display_local_screen_preview(frame_data)
 
 
 # For backward compatibility, create an alias

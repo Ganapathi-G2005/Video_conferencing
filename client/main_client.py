@@ -987,6 +987,40 @@ class CollaborationClient:
         except Exception as e:
             logger.error(f"Error handling local video frame: {e}")
     
+    def _on_local_screen_frame_captured(self, frame):
+        """Handle captured screen frame for local preview display."""
+        try:
+            # Validate frame
+            if frame is None:
+                logger.warning("Received None frame from screen capture")
+                return
+            
+            # Convert frame to bytes for display (screen frames are numpy arrays)
+            import cv2
+            import io
+            
+            # Encode frame as JPEG for display
+            if hasattr(cv2, 'IMWRITE_JPEG_QUALITY'):
+                encode_params = [cv2.IMWRITE_JPEG_QUALITY, 85]
+                success, encoded_frame = cv2.imencode('.jpg', frame, encode_params)
+                
+                if success:
+                    frame_bytes = encoded_frame.tobytes()
+                    
+                    # Update GUI with local screen preview
+                    if hasattr(self.gui_manager, 'display_local_screen_preview'):
+                        self.gui_manager.display_local_screen_preview(frame_bytes)
+                        logger.debug("Local screen preview sent to GUI")
+                    else:
+                        logger.warning("GUI display_local_screen_preview method not available")
+                else:
+                    logger.warning("Failed to encode screen frame for preview")
+            else:
+                logger.warning("OpenCV JPEG encoding not available for screen preview")
+        
+        except Exception as e:
+            logger.error(f"Error handling local screen frame: {e}")
+    
     def _on_incoming_video_frame(self, client_id: str, frame):
         """Handle incoming video frame from other participants."""
         try:
@@ -1052,7 +1086,8 @@ class CollaborationClient:
                     connection_manager=self.connection_manager
                 )
                 
-                # Don't set local frame callback - let clients only see others' screens
+                # Set local frame callback to show screen preview when sharing
+                self.screen_capture.set_frame_callback(self._on_local_screen_frame_captured)
             
             success = self.screen_capture.start_capture()
             if success:
