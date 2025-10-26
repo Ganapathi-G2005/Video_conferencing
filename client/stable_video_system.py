@@ -251,8 +251,8 @@ class StableVideoRenderer:
             # Convert to PIL Image
             pil_image = Image.fromarray(rgb_frame)
             
-            # Resize with high quality for stability
-            display_size = (200, 150)
+            # Resize with high quality for stability - 80% slot coverage
+            display_size = (320, 240)
             pil_image = pil_image.resize(display_size, Image.LANCZOS)
             
             # Convert to PhotoImage

@@ -715,66 +715,12 @@ class ScreenShareFrame(ModuleFrame):
         """Store current frame data for rescaling when canvas size changes."""
         self.current_frame_data = frame_data
         self.current_presenter = presenter_name
-    
-    def handle_presenter_granted(self):
-        """Handle presenter role being granted with enhanced feedback."""
-        self.set_presenter_status(True)
-        # Show visual indicators for active screen sharing state
-        self._safe_label_update(self.sharing_status, text="You are the presenter - ready to share", foreground='blue')
-        messagebox.showinfo("Screen Share", "You are now the presenter! You can start screen sharing.")
-    
-    def handle_presenter_denied(self, reason: str = ""):
-        """Handle presenter role being denied with detailed feedback."""
-        # Display presenter role denial reasons to users
-        message = "Presenter request denied"
-        if reason:
-            message += f": {reason}"
-        else:
-            message += ". Another user may already be presenting."
-        
-        # Show visual feedback in status
-        self._safe_label_update(self.sharing_status, text="Presenter request denied", foreground='red')
-        
-        # Reset status after a delay
-        self.after(3000, lambda: self._safe_label_update(self.sharing_status, text="Ready to share", foreground='black'))
-        
-        messagebox.showwarning("Screen Share", message)
-    
-    def handle_screen_share_started(self, presenter_name: str):
-        """Handle screen sharing being started by presenter."""
-        if presenter_name != "You":
-            self.update_presenter(presenter_name)
-            self._safe_label_update(self.screen_label, text=f"{presenter_name} is sharing their screen")
-    
-    def handle_screen_share_stopped(self):
-        """Handle screen sharing being stopped."""
-        # Clear current presenter when screen sharing stops
-        self.current_presenter_name = None
-        self.set_sharing_status(False)
-        # Clear presenter status since server clears presenter role when screen sharing stops
-        self.set_presenter_status(False)
-        # Reset status to "Ready to request presenter role" when screen sharing stops
-        self._safe_label_update(self.sharing_status, text="Ready to request presenter role", foreground='black')
-    
-    def set_presenter_status(self, is_presenter: bool, presenter_name: str = None):
-        """Set presenter status for screen sharing with visual indicators."""
-        if is_presenter:
-            self._safe_button_update(self.share_button, state='normal', text="Start Screen Share")
-            # Show visual indicators for active screen sharing state
-            self._safe_label_update(self.sharing_status, text="You are the presenter", foreground='blue')
-        else:
-            if presenter_name:
-                self._safe_button_update(self.share_button, state='disabled', text=f"{presenter_name} is presenter")
-                self._safe_label_update(self.sharing_status, text=f"{presenter_name} is the presenter", foreground='black')
-            else:
-                self._safe_button_update(self.share_button, state='normal', text="Request Presenter Role")
-                self._safe_label_update(self.sharing_status, text="Ready to request presenter role", foreground='black')
 
 
 # Import the remaining classes from the original file
 # (ChatFrame, FileTransferFrame, ParticipantListFrame remain the same)
-
-class ChatFrame(ModuleFrame):
+clas
+s ChatFrame(ModuleFrame):
     """Group chat module frame with chronological message ordering and history."""
     
     def __init__(self, parent):
@@ -1592,106 +1538,6 @@ class TabbedGUIManager:
     
     def get_participant_frame(self) -> Optional[ParticipantListFrame]:
         return self.participant_frame
-    
-    # File transfer progress methods (for compatibility with main_client.py)
-    def show_file_transfer_progress(self, filename: str, progress: float, transfer_type: str = "Downloading"):
-        """Show file transfer progress with enhanced display."""
-        if self.file_transfer_frame:
-            self.file_transfer_frame.show_transfer_progress(filename, progress, transfer_type)
-    
-    def hide_file_transfer_progress(self):
-        """Hide file transfer progress."""
-        if self.file_transfer_frame:
-            self.file_transfer_frame.hide_transfer_progress()
-    
-    # Participant management methods (for compatibility)
-    def update_participants(self, participants: Dict[str, Dict[str, Any]], current_client_id: str):
-        """Update participant list and video feeds."""
-        if self.participant_frame:
-            self.participant_frame.update_participants(participants, current_client_id)
-        
-        if self.video_frame:
-            self.video_frame.update_video_feeds(participants)
-    
-    def add_shared_file(self, file_id: str, filename: str, filesize: int, uploader: str):
-        """Add a file to the shared files list."""
-        if self.file_transfer_frame:
-            self.file_transfer_frame.add_shared_file(file_id, filename, filesize, uploader)
-    
-    # Video-related methods (for compatibility)
-    def update_local_video(self, frame):
-        """Update local video display."""
-        if self.video_frame:
-            self.video_frame.update_local_video(frame)
-    
-    def update_remote_video(self, client_id: str, frame):
-        """Update remote video display."""
-        if self.video_frame:
-            self.video_frame.update_remote_video(client_id, frame)
-    
-    def clear_video_slot(self, client_id: str):
-        """Clear video slot for disconnected client."""
-        if self.video_frame:
-            self.video_frame.clear_video_slot(client_id)
-    
-    # Audio-related methods (for compatibility)
-    def update_audio_level(self, level: float):
-        """Update audio level indicator."""
-        if self.audio_frame:
-            self.audio_frame.update_audio_level(level)
-    
-    # Chat-related methods (for compatibility)
-    def add_chat_message(self, username: str, message: str, timestamp: Optional[datetime] = None, 
-                        is_own_message: bool = False, message_type: str = 'chat'):
-        """Add a message to the chat display."""
-        if self.chat_frame:
-            self.chat_frame.add_message(username, message, timestamp, is_own_message, message_type)
-    
-    def add_system_message(self, message: str, timestamp: Optional[datetime] = None):
-        """Add a system message to chat."""
-        if self.chat_frame:
-            self.chat_frame.add_system_message(message, timestamp)
-    
-    # Screen sharing methods (for compatibility)
-    def update_presenter(self, presenter_name: str = None):
-        """Update presenter display."""
-        if self.screen_share_frame:
-            self.screen_share_frame.update_presenter(presenter_name)
-    
-    def set_sharing_status(self, is_sharing: bool):
-        """Set screen sharing status."""
-        if self.screen_share_frame:
-            self.screen_share_frame.set_sharing_status(is_sharing)
-    
-    def display_screen_frame(self, frame_data, presenter_name: str):
-        """Display screen frame from presenter."""
-        if self.screen_share_frame:
-            self.screen_share_frame.display_screen_frame(frame_data, presenter_name)
-    
-    def handle_presenter_granted(self):
-        """Handle presenter role being granted."""
-        if self.screen_share_frame:
-            self.screen_share_frame.handle_presenter_granted()
-    
-    def handle_presenter_denied(self, reason: str = ""):
-        """Handle presenter role being denied."""
-        if self.screen_share_frame:
-            self.screen_share_frame.handle_presenter_denied(reason)
-    
-    def handle_screen_share_started(self, presenter_name: str):
-        """Handle screen sharing being started."""
-        if self.screen_share_frame:
-            self.screen_share_frame.handle_screen_share_started(presenter_name)
-    
-    def handle_screen_share_stopped(self):
-        """Handle screen sharing being stopped."""
-        if self.screen_share_frame:
-            self.screen_share_frame.handle_screen_share_stopped()
-    
-    def set_presenter_status(self, is_presenter: bool, presenter_name: str = None):
-        """Set presenter status."""
-        if self.screen_share_frame:
-            self.screen_share_frame.set_presenter_status(is_presenter, presenter_name)
 
 
 # For backward compatibility, create an alias

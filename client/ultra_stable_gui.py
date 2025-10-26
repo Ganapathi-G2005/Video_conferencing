@@ -144,8 +144,8 @@ class UltraStableVideoWidget:
             # Convert to PIL Image
             pil_image = Image.fromarray(rgb_frame)
             
-            # Resize for display
-            display_size = (200, 150)
+            # Resize for display - 80% slot coverage
+            display_size = (320, 240)
             pil_image = pil_image.resize(display_size, Image.LANCZOS)
             
             # Convert to PhotoImage
