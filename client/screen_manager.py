@@ -57,6 +57,30 @@ class ScreenManager:
         
         logger.info("Screen sharing manager initialized")
     
+    def _get_presenter_name(self, presenter_id: str) -> str:
+        """
+        Resolve presenter ID to username.
+        
+        Args:
+            presenter_id: Client ID of the presenter
+            
+        Returns:
+            Username of the presenter, or a formatted fallback if username not found
+        """
+        try:
+            if self.connection_manager and hasattr(self.connection_manager, 'participants'):
+                participant_info = self.connection_manager.participants.get(presenter_id, {})
+                username = participant_info.get('username')
+                if username:
+                    return username
+            
+            # Fallback: return a formatted version of the client ID
+            return f"User {presenter_id[-4:]}" if len(presenter_id) > 4 else f"User {presenter_id}"
+            
+        except Exception as e:
+            logger.error(f"Error resolving presenter name for {presenter_id}: {e}")
+            return f"User {presenter_id[-4:]}" if len(presenter_id) > 4 else f"User {presenter_id}"
+    
     def _setup_callbacks(self):
         """Setup callbacks between components."""
         # Screen playback callbacks
@@ -418,7 +442,8 @@ class ScreenManager:
                 # Someone started screen sharing
                 try:
                     presenter_id = message.sender_id
-                    presenter_name = message.data.get('presenter_name', f"User {presenter_id[-4:]}") if message.data else f"User {presenter_id[-4:]}"
+                    # Resolve presenter ID to actual username
+                    presenter_name = self._get_presenter_name(presenter_id)
                     
                     if self.gui_manager:
                         # Update presenter info and status message
@@ -497,13 +522,17 @@ class ScreenManager:
                         
                         if success:
                             jpeg_bytes = encoded_frame.tobytes()
-                            self.gui_manager.display_screen_frame(jpeg_bytes, presenter_id)
+                            # Resolve presenter ID to actual username
+                            presenter_name = self._get_presenter_name(presenter_id)
+                            self.gui_manager.display_screen_frame(jpeg_bytes, presenter_name)
                         else:
                             logger.error("Failed to encode numpy array to JPEG for display")
                             self.gui_manager.show_error("Display Error", "Failed to encode screen frame for display")
                     else:
                         # Assume it's already bytes (fallback)
-                        self.gui_manager.display_screen_frame(frame_data, presenter_id)
+                        # Resolve presenter ID to actual username
+                        presenter_name = self._get_presenter_name(presenter_id)
+                        self.gui_manager.display_screen_frame(frame_data, presenter_name)
                         
                 except Exception as gui_error:
                     logger.error(f"Error updating GUI with screen frame: {gui_error}")
@@ -524,8 +553,9 @@ class ScreenManager:
             # Update GUI with presenter change
             if self.gui_manager:
                 try:
-                    presenter_name = f"User {presenter_id[-4:]}" if presenter_id else None
-                    self.gui_manager.update_screen_sharing_presenter(presenter_name)
+                    # Resolve presenter ID to actual username
+                    presenter_name = self._get_presenter_name(presenter_id) if presenter_id else None
+                    self.gui_manager.update_presenter(presenter_name)
                     logger.info(f"Updated presenter to: {presenter_name}")
                 except Exception as gui_error:
                     logger.error(f"Error updating GUI with presenter change: {gui_error}")
