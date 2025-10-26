@@ -670,13 +670,42 @@ class ScreenShareFrame(ModuleFrame):
             self.screen_canvas.pack_forget()
             self.screen_label.pack(expand=True)
             
+            # Clear cached values when stopping screen sharing to prevent issues
+            self._reset_screen_cache()
+            
             if self.current_presenter_name:
                 self._safe_label_update(self.screen_label, text=f"{self.current_presenter_name} is sharing")
             else:
                 self._safe_label_update(self.screen_label, text="No screen sharing active")
+    
+    def _reset_screen_cache(self):
+        """Reset cached screen display values to prevent flickering issues."""
+        try:
+            # Reset all cached values
+            self._cached_canvas_size = None
+            self._cached_scale = None
+            self._cached_scale_key = None
+            self._cached_dimensions = None
+            self._last_image_id = None
+            
+            # Reset local preview cache
+            self._cached_local_canvas_size = None
+            self._cached_local_scale = None
+            self._cached_local_scale_key = None
+            self._cached_local_dimensions = None
+            self._local_image_id = None
+            
+            # Clear canvas completely
+            if hasattr(self, 'screen_canvas') and self.screen_canvas:
+                self.screen_canvas.delete("all")
+            
+            logger.debug("Screen display cache reset")
+            
+        except Exception as e:
+            logger.error(f"Error resetting screen cache: {e}")
 
     def display_screen_frame(self, frame_data, presenter_name: str):
-        """Display a screen frame from the presenter with improved scaling and centering."""
+        """Display a screen frame from the presenter with anti-flickering optimizations."""
         try:
             # Handle None frame data (black screen when presenter stops)
             if frame_data is None:
@@ -689,33 +718,35 @@ class ScreenShareFrame(ModuleFrame):
             # Store current frame data for rescaling when canvas size changes
             self._store_current_frame(frame_data, presenter_name)
             
-            # Update presenter info
+            # Update presenter info only when changed (reduce unnecessary updates)
             if self.current_presenter_name != presenter_name:
                 self.update_presenter(presenter_name)
-                logger.info(f"Now receiving screen from {presenter_name}")
+                logger.debug(f"Now receiving screen from {presenter_name}")  # Changed to debug
             
             # Convert frame data to PIL Image
             image = Image.open(io.BytesIO(frame_data))
             
-            # Show canvas first to ensure it's visible
+            # Show canvas first to ensure it's visible (only if not already visible)
             if not self.screen_canvas.winfo_viewable():
                 self.screen_label.pack_forget()
                 self.screen_canvas.pack(fill='both', expand=True)
+                # Only update canvas size when first showing
+                self.screen_canvas.update_idletasks()
             
-            # Force canvas to update its size and ensure it's ready
-            self.screen_canvas.update_idletasks()
-            
-            # Get canvas dimensions with fallback values
-            canvas_width = self.screen_canvas.winfo_width()
-            canvas_height = self.screen_canvas.winfo_height()
-            
-            # Use fallback dimensions if canvas is not properly initialized
-            if canvas_width <= 10 or canvas_height <= 10:
-                canvas_width = max(canvas_width, 400)  # Fallback minimum width
-                canvas_height = max(canvas_height, 300)  # Fallback minimum height
-                logger.info(f"Using fallback canvas dimensions: {canvas_width}x{canvas_height}")
-            
-            logger.info(f"Canvas size: {canvas_width}x{canvas_height}, Image size: {image.size}")
+            # Get canvas dimensions with caching to avoid repeated calls
+            if not hasattr(self, '_cached_canvas_size') or self._cached_canvas_size is None:
+                canvas_width = self.screen_canvas.winfo_width()
+                canvas_height = self.screen_canvas.winfo_height()
+                
+                # Use fallback dimensions if canvas is not properly initialized
+                if canvas_width <= 10 or canvas_height <= 10:
+                    canvas_width = max(canvas_width, 600)  # Larger fallback for dedicated tab
+                    canvas_height = max(canvas_height, 400)
+                    logger.debug(f"Using fallback canvas dimensions: {canvas_width}x{canvas_height}")
+                
+                self._cached_canvas_size = (canvas_width, canvas_height)
+            else:
+                canvas_width, canvas_height = self._cached_canvas_size
             
             # Calculate proper aspect ratio scaling to prevent distortion
             img_width, img_height = image.size
@@ -723,53 +754,76 @@ class ScreenShareFrame(ModuleFrame):
                 logger.error("Invalid image dimensions")
                 return
             
-            # Calculate scale factors for both dimensions
-            scale_w = canvas_width / img_width
-            scale_h = canvas_height / img_height
+            # Cache scaling calculations to avoid repeated computation
+            scale_key = f"{img_width}x{img_height}_{canvas_width}x{canvas_height}"
+            if not hasattr(self, '_cached_scale') or self._cached_scale_key != scale_key:
+                # Calculate scale factors for both dimensions
+                scale_w = canvas_width / img_width
+                scale_h = canvas_height / img_height
+                
+                # Use the smaller scale to fit within canvas while maintaining aspect ratio
+                scale = min(scale_w, scale_h) * 0.95  # Use 95% to leave small margin
+                
+                # Apply minimum scale factor to prevent tiny images
+                scale = max(scale, 0.3)
+                
+                # Calculate new dimensions
+                new_width = int(img_width * scale)
+                new_height = int(img_height * scale)
+                
+                # Ensure minimum visible size
+                new_width = max(new_width, 200)
+                new_height = max(new_height, 150)
+                
+                # Cache the calculations
+                self._cached_scale = scale
+                self._cached_scale_key = scale_key
+                self._cached_dimensions = (new_width, new_height)
+                
+                logger.debug(f"Calculated scaling: {img_width}x{img_height} -> {new_width}x{new_height} (scale: {scale:.2f})")
+            else:
+                new_width, new_height = self._cached_dimensions
             
-            # Use the smaller scale to fit within canvas while maintaining aspect ratio
-            scale = min(scale_w, scale_h)
-            
-            # Apply minimum scale factor to prevent tiny images (at least 20% of original)
-            scale = max(scale, 0.2)
-            
-            # Calculate new dimensions
-            new_width = int(img_width * scale)
-            new_height = int(img_height * scale)
-            
-            # Ensure minimum visible size
-            new_width = max(new_width, 100)
-            new_height = max(new_height, 75)
-            
-            logger.info(f"Scaling image from {img_width}x{img_height} to {new_width}x{new_height} (scale: {scale:.2f})")
-            
-            # Resize image with high quality resampling
-            image = image.resize((new_width, new_height), Image.LANCZOS)
+            # Resize image with optimized resampling for speed
+            image = image.resize((new_width, new_height), Image.NEAREST)  # Faster than LANCZOS
             
             # Convert to PhotoImage for tkinter
             photo = ImageTk.PhotoImage(image)
             
-            # Clear canvas completely
-            self.screen_canvas.delete("all")
-            
-            # Center the image in the canvas to remove black space
-            x = (canvas_width - new_width) // 2
-            y = (canvas_height - new_height) // 2
-            
-            # Ensure centering coordinates are not negative
-            x = max(0, x)
-            y = max(0, y)
-            
-            # Create image on canvas at centered position
-            self.screen_canvas.create_image(x, y, anchor='nw', image=photo)
+            # Optimized canvas update - only clear and redraw if necessary
+            if not hasattr(self, '_last_image_id') or self._last_image_id is None:
+                # First image - clear canvas
+                self.screen_canvas.delete("all")
+                
+                # Center the image in the canvas
+                x = (canvas_width - new_width) // 2
+                y = (canvas_height - new_height) // 2
+                x = max(0, x)
+                y = max(0, y)
+                
+                # Create image on canvas at centered position
+                self._last_image_id = self.screen_canvas.create_image(x, y, anchor='nw', image=photo)
+            else:
+                # Update existing image instead of clearing and recreating
+                x = (canvas_width - new_width) // 2
+                y = (canvas_height - new_height) // 2
+                x = max(0, x)
+                y = max(0, y)
+                
+                # Update the existing image item
+                self.screen_canvas.coords(self._last_image_id, x, y)
+                self.screen_canvas.itemconfig(self._last_image_id, image=photo)
             
             # Keep a reference to prevent garbage collection
             self.screen_canvas.image = photo
             
-            logger.info(f"Image displayed at centered position ({x}, {y})")
-            
         except Exception as e:
             logger.error(f"Error displaying screen frame: {e}")
+            # Reset cached values on error
+            self._cached_canvas_size = None
+            self._cached_scale = None
+            self._last_image_id = None
+            
             # Show error message to user
             if hasattr(self, 'screen_label'):
                 self._safe_label_update(self.screen_label, text=f"Error displaying screen from {presenter_name}")
@@ -967,7 +1021,7 @@ class ScreenShareFrame(ModuleFrame):
             logger.error(f"Error showing local sharing preview: {e}")
     
     def display_local_screen_preview(self, frame_data):
-        """Display a preview of your own screen when sharing."""
+        """Display a preview of your own screen when sharing with anti-flickering optimizations."""
         try:
             if not self.is_sharing:
                 return  # Only show preview when actively sharing
@@ -978,71 +1032,98 @@ class ScreenShareFrame(ModuleFrame):
             # Convert frame data to PIL Image
             image = Image.open(io.BytesIO(frame_data))
             
-            # Ensure canvas is visible
+            # Ensure canvas is visible (only if not already visible)
             if not self.screen_canvas.winfo_viewable():
                 self.screen_label.pack_forget()
                 self.screen_canvas.pack(fill='both', expand=True)
+                # Only update canvas size when first showing
+                self.screen_canvas.update_idletasks()
             
-            # Force canvas to update its size
-            self.screen_canvas.update_idletasks()
-            
-            # Get canvas dimensions with fallback values
-            canvas_width = self.screen_canvas.winfo_width()
-            canvas_height = self.screen_canvas.winfo_height()
-            
-            if canvas_width <= 10 or canvas_height <= 10:
-                canvas_width = 600
-                canvas_height = 400
+            # Get canvas dimensions with caching for local preview
+            if not hasattr(self, '_cached_local_canvas_size') or self._cached_local_canvas_size is None:
+                canvas_width = self.screen_canvas.winfo_width()
+                canvas_height = self.screen_canvas.winfo_height()
+                
+                if canvas_width <= 10 or canvas_height <= 10:
+                    canvas_width = 600
+                    canvas_height = 400
+                
+                self._cached_local_canvas_size = (canvas_width, canvas_height)
+            else:
+                canvas_width, canvas_height = self._cached_local_canvas_size
             
             # Calculate scaling to fit canvas while maintaining aspect ratio
             img_width, img_height = image.size
             if img_width <= 0 or img_height <= 0:
                 return
             
-            scale_w = canvas_width / img_width
-            scale_h = canvas_height / img_height
-            scale = min(scale_w, scale_h) * 0.9  # Use 90% to leave some margin
+            # Cache scaling calculations for local preview
+            local_scale_key = f"local_{img_width}x{img_height}_{canvas_width}x{canvas_height}"
+            if not hasattr(self, '_cached_local_scale') or self._cached_local_scale_key != local_scale_key:
+                scale_w = canvas_width / img_width
+                scale_h = canvas_height / img_height
+                scale = min(scale_w, scale_h) * 0.9  # Use 90% to leave some margin
+                
+                # Calculate new dimensions
+                new_width = int(img_width * scale)
+                new_height = int(img_height * scale)
+                
+                # Cache the calculations
+                self._cached_local_scale = scale
+                self._cached_local_scale_key = local_scale_key
+                self._cached_local_dimensions = (new_width, new_height)
+            else:
+                new_width, new_height = self._cached_local_dimensions
             
-            # Calculate new dimensions
-            new_width = int(img_width * scale)
-            new_height = int(img_height * scale)
-            
-            # Resize image
-            image = image.resize((new_width, new_height), Image.LANCZOS)
+            # Resize image with faster resampling for preview
+            image = image.resize((new_width, new_height), Image.NEAREST)
             
             # Convert to PhotoImage
             photo = ImageTk.PhotoImage(image)
             
-            # Clear canvas and display image
-            self.screen_canvas.delete("all")
-            
-            # Center the image
-            x = (canvas_width - new_width) // 2
-            y = (canvas_height - new_height) // 2
-            
-            # Create image on canvas
-            self.screen_canvas.create_image(x, y, anchor='nw', image=photo)
-            
-            # Add "SHARING" overlay in top-right corner
-            self.screen_canvas.create_rectangle(
-                canvas_width - 120, 10, canvas_width - 10, 40,
-                fill="#ff4444", outline="#ff4444"
-            )
-            self.screen_canvas.create_text(
-                canvas_width - 65, 25,
-                text="● SHARING",
-                fill="white",
-                font=("Arial", 10, "bold"),
-                anchor="center"
-            )
+            # Optimized canvas update for local preview
+            if not hasattr(self, '_local_image_id') or self._local_image_id is None:
+                # First local image - clear canvas
+                self.screen_canvas.delete("all")
+                
+                # Center the image
+                x = (canvas_width - new_width) // 2
+                y = (canvas_height - new_height) // 2
+                
+                # Create image on canvas
+                self._local_image_id = self.screen_canvas.create_image(x, y, anchor='nw', image=photo)
+                
+                # Add "SHARING" overlay (create once)
+                self._sharing_overlay_rect = self.screen_canvas.create_rectangle(
+                    canvas_width - 120, 10, canvas_width - 10, 40,
+                    fill="#ff4444", outline="#ff4444"
+                )
+                self._sharing_overlay_text = self.screen_canvas.create_text(
+                    canvas_width - 65, 25,
+                    text="● SHARING",
+                    fill="white",
+                    font=("Arial", 10, "bold"),
+                    anchor="center"
+                )
+            else:
+                # Update existing image instead of clearing and recreating
+                x = (canvas_width - new_width) // 2
+                y = (canvas_height - new_height) // 2
+                
+                # Update the existing image item
+                self.screen_canvas.coords(self._local_image_id, x, y)
+                self.screen_canvas.itemconfig(self._local_image_id, image=photo)
             
             # Keep reference to prevent garbage collection
             self.screen_canvas.image = photo
             
-            logger.debug("Local screen preview updated")
-            
         except Exception as e:
             logger.error(f"Error displaying local screen preview: {e}")
+            # Reset cached values on error
+            self._cached_local_canvas_size = None
+            self._cached_local_scale = None
+            self._local_image_id = None
+            
             # Fallback to preview message
             self._show_local_sharing_preview()
     

@@ -988,20 +988,34 @@ class CollaborationClient:
             logger.error(f"Error handling local video frame: {e}")
     
     def _on_local_screen_frame_captured(self, frame):
-        """Handle captured screen frame for local preview display."""
+        """Handle captured screen frame for local preview display with frame rate limiting."""
         try:
             # Validate frame
             if frame is None:
                 logger.warning("Received None frame from screen capture")
                 return
             
+            # Frame rate limiting for local preview to prevent flickering
+            import time
+            current_time = time.time()
+            
+            # Limit local preview to 10 FPS to reduce flickering
+            if not hasattr(self, '_last_preview_time'):
+                self._last_preview_time = 0
+            
+            if current_time - self._last_preview_time < 0.1:  # 100ms = 10 FPS
+                return  # Skip this frame
+            
+            self._last_preview_time = current_time
+            
             # Convert frame to bytes for display (screen frames are numpy arrays)
             import cv2
             import io
             
-            # Encode frame as JPEG for display
+            # Encode frame as JPEG for display with optimized settings
             if hasattr(cv2, 'IMWRITE_JPEG_QUALITY'):
-                encode_params = [cv2.IMWRITE_JPEG_QUALITY, 85]
+                # Use higher compression for preview to reduce processing time
+                encode_params = [cv2.IMWRITE_JPEG_QUALITY, 70]  # Reduced quality for faster processing
                 success, encoded_frame = cv2.imencode('.jpg', frame, encode_params)
                 
                 if success:

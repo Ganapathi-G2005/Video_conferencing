@@ -53,9 +53,9 @@ class ScreenCapture:
     - Cross-platform screen capture support
     """
     
-    # Screen capture configuration constants - Optimized for high FPS
-    DEFAULT_FPS = 30  # Increased FPS for smooth screen sharing
-    COMPRESSION_QUALITY = 70  # Higher quality for better visual experience
+    # Screen capture configuration constants - Optimized for smooth sharing without flickering
+    DEFAULT_FPS = 15  # Reduced FPS to prevent flickering while maintaining smoothness
+    COMPRESSION_QUALITY = 75  # Slightly higher quality for better visual experience
     MAX_WIDTH = 1280  # Higher resolution for better screen sharing
     MAX_HEIGHT = 720
     
