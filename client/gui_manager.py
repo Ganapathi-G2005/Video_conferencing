@@ -502,9 +502,9 @@ class ScreenShareFrame(ModuleFrame):
         self.sharing_status = ttk.Label(self.status_frame, text="Ready to share")
         self.sharing_status.pack(side='left')
         
-        # Screen display area (much larger for dedicated tab)
-        self.screen_display = tk.Frame(self, bg='black', height=600)
-        self.screen_display.pack(fill='both', expand=True, padx=2, pady=2)
+        # Screen display area (maximum size for dedicated tab)
+        self.screen_display = tk.Frame(self, bg='black', height=700)
+        self.screen_display.pack(fill='both', expand=True, padx=1, pady=1)
         self.screen_display.pack_propagate(False)  # Maintain minimum height
         
         self.screen_label = ttk.Label(self.screen_display, text="No screen sharing active", 
@@ -740,8 +740,8 @@ class ScreenShareFrame(ModuleFrame):
                 
                 # Use fallback dimensions if canvas is not properly initialized
                 if canvas_width <= 10 or canvas_height <= 10:
-                    canvas_width = max(canvas_width, 800)  # Larger fallback for dedicated tab
-                    canvas_height = max(canvas_height, 500)  # Increased height for better display
+                    canvas_width = max(canvas_width, 1000)  # Maximum fallback for full screen effect
+                    canvas_height = max(canvas_height, 650)  # Maximum height for better display
                     logger.debug(f"Using fallback canvas dimensions: {canvas_width}x{canvas_height}")
                 
                 self._cached_canvas_size = (canvas_width, canvas_height)
@@ -762,7 +762,7 @@ class ScreenShareFrame(ModuleFrame):
                 scale_h = canvas_height / img_height
                 
                 # Use the smaller scale to fit within canvas while maintaining aspect ratio
-                scale = min(scale_w, scale_h) * 0.98  # Use 98% to maximize space usage with minimal margin
+                scale = min(scale_w, scale_h) * 0.99  # Use 99% to maximize space usage for full screen effect
                 
                 # Apply minimum scale factor to prevent tiny images
                 scale = max(scale, 0.3)
@@ -1045,8 +1045,8 @@ class ScreenShareFrame(ModuleFrame):
                 canvas_height = self.screen_canvas.winfo_height()
                 
                 if canvas_width <= 10 or canvas_height <= 10:
-                    canvas_width = 800
-                    canvas_height = 500
+                    canvas_width = 1000
+                    canvas_height = 650
                 
                 self._cached_local_canvas_size = (canvas_width, canvas_height)
             else:
@@ -1062,7 +1062,7 @@ class ScreenShareFrame(ModuleFrame):
             if not hasattr(self, '_cached_local_scale') or self._cached_local_scale_key != local_scale_key:
                 scale_w = canvas_width / img_width
                 scale_h = canvas_height / img_height
-                scale = min(scale_w, scale_h) * 0.98  # Use 98% to maximize space usage with minimal margin
+                scale = min(scale_w, scale_h) * 0.99  # Use 99% to maximize space usage for full screen effect
                 
                 # Calculate new dimensions
                 new_width = int(img_width * scale)
