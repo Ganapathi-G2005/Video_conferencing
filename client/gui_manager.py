@@ -63,19 +63,16 @@ class VideoFrame(ModuleFrame):
     def __init__(self, parent):
         super().__init__(parent, "Video Conference")
         
-        # Video controls at top
-        self.controls_frame = ttk.Frame(self)
-        self.controls_frame.pack(fill='x', padx=5, pady=5)
-        
+        # Add video controls to the existing status frame (same row as Inactive/Active)
         self.video_button = ttk.Button(
-            self.controls_frame, 
+            self.status_frame, 
             text="Enable Video", 
             command=self._toggle_video
         )
-        self.video_button.pack(side='left', padx=2)
+        self.video_button.pack(side='left', padx=(10, 2))
         
-        # Video quality indicator
-        self.quality_label = ttk.Label(self.controls_frame, text="Quality: Auto")
+        # Video quality indicator on the right side of status frame
+        self.quality_label = ttk.Label(self.status_frame, text="Quality: Auto")
         self.quality_label.pack(side='right', padx=5)
         
         # Large video display area with grid layout
@@ -1855,27 +1852,30 @@ class TabbedGUIManager:
         media_frame = ttk.Frame(self.notebook)
         self.notebook.add(media_frame, text="🎥 Video & Audio")
         
-        # Configure grid weights
-        media_frame.rowconfigure(0, weight=1)
-        media_frame.columnconfigure(0, weight=2)  # Video gets more space
-        media_frame.columnconfigure(1, weight=1)  # Right panel for participants
+        # Configure grid weights - video takes most space, bottom panel is very minimal
+        media_frame.rowconfigure(0, weight=10)  # Video area gets most space (increased to 10)
+        media_frame.rowconfigure(1, weight=1)   # Bottom panel gets very minimal space
+        media_frame.columnconfigure(0, weight=1)
         
-        # Left side: Video conferencing (larger area)
-        video_container = ttk.Frame(media_frame)
-        video_container.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
-        video_container.rowconfigure(0, weight=1)
-        video_container.columnconfigure(0, weight=1)
+        # Top: Large video conferencing area (4 equal slots) - maximum space
+        self.video_frame = VideoFrame(media_frame)
+        self.video_frame.grid(row=0, column=0, sticky='nsew', padx=5, pady=(5, 1))
         
-        self.video_frame = VideoFrame(video_container)
-        self.video_frame.grid(row=0, column=0, sticky='nsew', pady=(0, 5))
+        # Bottom: Audio controls and Participants side by side (pushed to bottom)
+        bottom_panel = ttk.Frame(media_frame)
+        bottom_panel.grid(row=1, column=0, sticky='ew', padx=5, pady=(1, 5))
         
-        # Audio controls below video
-        self.audio_frame = AudioFrame(video_container)
-        self.audio_frame.grid(row=1, column=0, sticky='ew')
+        # Configure bottom panel - equal weights for audio and participants
+        bottom_panel.columnconfigure(0, weight=1)  # Audio controls
+        bottom_panel.columnconfigure(1, weight=1)  # Participants
         
-        # Right side: Participants only
-        self.participant_frame = ParticipantListFrame(media_frame)
-        self.participant_frame.grid(row=0, column=1, sticky='nsew', padx=(5, 0))
+        # Audio controls on the left side of bottom panel
+        self.audio_frame = AudioFrame(bottom_panel)
+        self.audio_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 2))
+        
+        # Participants on the right side of bottom panel (same height as audio)
+        self.participant_frame = ParticipantListFrame(bottom_panel)
+        self.participant_frame.grid(row=0, column=1, sticky='nsew', padx=(2, 0))
     
     def _create_screen_share_tab(self):
         """Create the dedicated Screen Share tab."""
