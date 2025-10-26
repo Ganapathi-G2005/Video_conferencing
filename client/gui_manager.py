@@ -368,50 +368,39 @@ class VideoFrame(ModuleFrame):
             logger.error(f"Error clearing ultra-stable video slot for {client_id}: {e}")
 
 
-class AudioFrame(ModuleFrame):
-    """Audio conferencing module frame."""
+class AudioFrame:
+    """Compact audio controls for integration into status row."""
     
     def __init__(self, parent):
-        super().__init__(parent, "Audio Conference")
+        self.parent = parent
+        self.enabled = False
+        self.muted = False
         
-        # Audio controls
-        self.controls_frame = ttk.Frame(self)
-        self.controls_frame.pack(fill='x', padx=5, pady=5)
-        
+        # Create compact audio controls in the parent frame (status row)
         self.audio_button = ttk.Button(
-            self.controls_frame, 
+            parent, 
             text="Enable Audio", 
             command=self._toggle_audio
         )
-        self.audio_button.pack(side='left', padx=2)
+        self.audio_button.pack(side='left', padx=(10, 2))
         
         self.mute_button = ttk.Button(
-            self.controls_frame, 
+            parent, 
             text="Mute", 
             command=self._toggle_mute,
             state='disabled'
         )
         self.mute_button.pack(side='left', padx=2)
         
-        # Audio level indicator
-        self.level_frame = ttk.Frame(self)
-        self.level_frame.pack(fill='x', padx=5, pady=5)
-        
-        ttk.Label(self.level_frame, text="Audio Level:").pack(side='left')
+        # Compact audio level indicator
+        ttk.Label(parent, text="Level:").pack(side='left', padx=(10, 2))
         
         self.level_bar = ttk.Progressbar(
-            self.level_frame, 
-            length=100, 
+            parent, 
+            length=60,  # Compact size
             mode='determinate'
         )
-        self.level_bar.pack(side='left', padx=(5, 0), fill='x', expand=True)
-        
-        # Audio status
-        self.audio_status = ttk.Label(self, text="Audio inactive")
-        self.audio_status.pack(pady=5)
-        
-        # State
-        self.muted = False
+        self.level_bar.pack(side='left', padx=2)
         
         # Callbacks
         self.audio_callback: Optional[Callable[[bool], None]] = None
@@ -428,7 +417,6 @@ class AudioFrame(ModuleFrame):
     def _toggle_audio(self):
         """Toggle audio on/off."""
         self.enabled = not self.enabled
-        self._update_status_indicator()
         
         button_text = "Disable Audio" if self.enabled else "Enable Audio"
         self.audio_button.config(text=button_text)
@@ -436,13 +424,6 @@ class AudioFrame(ModuleFrame):
         # Enable/disable mute button
         mute_state = 'normal' if self.enabled else 'disabled'
         self.mute_button.config(state=mute_state)
-        
-        # Update status
-        if self.enabled:
-            status_text = "Muted" if self.muted else "Active"
-        else:
-            status_text = "Inactive"
-        self.audio_status.config(text=f"Audio {status_text}")
         
         if self.audio_callback:
             self.audio_callback(self.enabled and not self.muted)
@@ -453,9 +434,6 @@ class AudioFrame(ModuleFrame):
         
         button_text = "Unmute" if self.muted else "Mute"
         self.mute_button.config(text=button_text)
-        
-        status_text = "Muted" if self.muted else "Active"
-        self.audio_status.config(text=f"Audio {status_text}")
         
         # Call separate mute callback if available
         if self.mute_callback:
@@ -1848,34 +1826,23 @@ class TabbedGUIManager:
         self._create_files_tab()
     
     def _create_media_tab(self):
-        """Create the Video & Audio tab with video conferencing and audio controls."""
+        """Create the Video & Audio tab with video conferencing and integrated audio controls."""
         media_frame = ttk.Frame(self.notebook)
         self.notebook.add(media_frame, text="🎥 Video & Audio")
         
-        # Configure grid weights - video takes most space, bottom panel is very minimal
-        media_frame.rowconfigure(0, weight=10)  # Video area gets most space (increased to 10)
-        media_frame.rowconfigure(1, weight=1)   # Bottom panel gets very minimal space
+        # Configure for full expansion - video frame fills entire tab
+        media_frame.rowconfigure(0, weight=1)
         media_frame.columnconfigure(0, weight=1)
         
-        # Top: Large video conferencing area (4 equal slots) - maximum space
+        # Video frame with integrated audio controls fills the entire tab
         self.video_frame = VideoFrame(media_frame)
-        self.video_frame.grid(row=0, column=0, sticky='nsew', padx=5, pady=(5, 1))
+        self.video_frame.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
         
-        # Bottom: Audio controls and Participants side by side (pushed to bottom)
-        bottom_panel = ttk.Frame(media_frame)
-        bottom_panel.grid(row=1, column=0, sticky='ew', padx=5, pady=(1, 5))
+        # Create audio controls directly in the video frame (will be added to status row)
+        self.audio_frame = AudioFrame(self.video_frame.status_frame)
         
-        # Configure bottom panel - equal weights for audio and participants
-        bottom_panel.columnconfigure(0, weight=1)  # Audio controls
-        bottom_panel.columnconfigure(1, weight=1)  # Participants
-        
-        # Audio controls on the left side of bottom panel
-        self.audio_frame = AudioFrame(bottom_panel)
-        self.audio_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 2))
-        
-        # Participants on the right side of bottom panel (same height as audio)
-        self.participant_frame = ParticipantListFrame(bottom_panel)
-        self.participant_frame.grid(row=0, column=1, sticky='nsew', padx=(2, 0))
+        # No participants frame - removed as requested
+        self.participant_frame = None
     
     def _create_screen_share_tab(self):
         """Create the dedicated Screen Share tab."""
@@ -2023,10 +1990,8 @@ class TabbedGUIManager:
     
     # Participant management methods (for compatibility)
     def update_participants(self, participants: Dict[str, Dict[str, Any]], current_client_id: str):
-        """Update participant list and video feeds."""
-        if self.participant_frame:
-            self.participant_frame.update_participants(participants, current_client_id)
-        
+        """Update video feeds (participant list removed)."""
+        # Participant frame removed - only update video feeds
         if self.video_frame:
             self.video_frame.update_video_feeds(participants)
     
