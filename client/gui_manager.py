@@ -504,7 +504,7 @@ class ScreenShareFrame(ModuleFrame):
         
         # Screen display area (much larger for dedicated tab)
         self.screen_display = tk.Frame(self, bg='black', height=600)
-        self.screen_display.pack(fill='both', expand=True, padx=5, pady=5)
+        self.screen_display.pack(fill='both', expand=True, padx=2, pady=2)
         self.screen_display.pack_propagate(False)  # Maintain minimum height
         
         self.screen_label = ttk.Label(self.screen_display, text="No screen sharing active", 
@@ -740,8 +740,8 @@ class ScreenShareFrame(ModuleFrame):
                 
                 # Use fallback dimensions if canvas is not properly initialized
                 if canvas_width <= 10 or canvas_height <= 10:
-                    canvas_width = max(canvas_width, 600)  # Larger fallback for dedicated tab
-                    canvas_height = max(canvas_height, 400)
+                    canvas_width = max(canvas_width, 800)  # Larger fallback for dedicated tab
+                    canvas_height = max(canvas_height, 500)  # Increased height for better display
                     logger.debug(f"Using fallback canvas dimensions: {canvas_width}x{canvas_height}")
                 
                 self._cached_canvas_size = (canvas_width, canvas_height)
@@ -762,7 +762,7 @@ class ScreenShareFrame(ModuleFrame):
                 scale_h = canvas_height / img_height
                 
                 # Use the smaller scale to fit within canvas while maintaining aspect ratio
-                scale = min(scale_w, scale_h) * 0.95  # Use 95% to leave small margin
+                scale = min(scale_w, scale_h) * 0.98  # Use 98% to maximize space usage with minimal margin
                 
                 # Apply minimum scale factor to prevent tiny images
                 scale = max(scale, 0.3)
@@ -784,8 +784,8 @@ class ScreenShareFrame(ModuleFrame):
             else:
                 new_width, new_height = self._cached_dimensions
             
-            # Resize image with optimized resampling for speed
-            image = image.resize((new_width, new_height), Image.NEAREST)  # Faster than LANCZOS
+            # Resize image with high quality resampling (since we reduced frame rate, we can afford better quality)
+            image = image.resize((new_width, new_height), Image.LANCZOS)  # Better quality for screen sharing
             
             # Convert to PhotoImage for tkinter
             photo = ImageTk.PhotoImage(image)
@@ -1045,8 +1045,8 @@ class ScreenShareFrame(ModuleFrame):
                 canvas_height = self.screen_canvas.winfo_height()
                 
                 if canvas_width <= 10 or canvas_height <= 10:
-                    canvas_width = 600
-                    canvas_height = 400
+                    canvas_width = 800
+                    canvas_height = 500
                 
                 self._cached_local_canvas_size = (canvas_width, canvas_height)
             else:
@@ -1062,7 +1062,7 @@ class ScreenShareFrame(ModuleFrame):
             if not hasattr(self, '_cached_local_scale') or self._cached_local_scale_key != local_scale_key:
                 scale_w = canvas_width / img_width
                 scale_h = canvas_height / img_height
-                scale = min(scale_w, scale_h) * 0.9  # Use 90% to leave some margin
+                scale = min(scale_w, scale_h) * 0.98  # Use 98% to maximize space usage with minimal margin
                 
                 # Calculate new dimensions
                 new_width = int(img_width * scale)
@@ -1075,8 +1075,8 @@ class ScreenShareFrame(ModuleFrame):
             else:
                 new_width, new_height = self._cached_local_dimensions
             
-            # Resize image with faster resampling for preview
-            image = image.resize((new_width, new_height), Image.NEAREST)
+            # Resize image with good quality resampling for preview
+            image = image.resize((new_width, new_height), Image.LANCZOS)
             
             # Convert to PhotoImage
             photo = ImageTk.PhotoImage(image)
