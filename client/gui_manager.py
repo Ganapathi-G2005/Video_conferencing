@@ -502,8 +502,8 @@ class ScreenShareFrame(ModuleFrame):
         self.sharing_status = ttk.Label(self.status_frame, text="Ready to share")
         self.sharing_status.pack(side='left')
         
-        # Screen display area (larger for better visibility)
-        self.screen_display = tk.Frame(self, bg='black', height=400)
+        # Screen display area (much larger for dedicated tab)
+        self.screen_display = tk.Frame(self, bg='black', height=600)
         self.screen_display.pack(fill='both', expand=True, padx=5, pady=5)
         self.screen_display.pack_propagate(False)  # Maintain minimum height
         
@@ -529,45 +529,31 @@ class ScreenShareFrame(ModuleFrame):
         
         # Callbacks
         self.screen_share_callback: Optional[Callable[[bool], None]] = None
-    
-    def _initialize_canvas(self):
-        """Initialize canvas with proper size detection."""
+
+    def _safe_button_update(self, button, **kwargs):
+        """Safely update button properties with validation."""
         try:
-            # Set initial canvas size
-            self.last_canvas_size = (400, 300)
+            if button and button.winfo_exists():
+                button.config(**kwargs)
+            else:
+                logger.warning("Attempted to update non-existent button")
+        except tk.TclError as e:
+            logger.error(f"Tkinter error updating button: {e}")
         except Exception as e:
-            logger.error(f"Error initializing canvas: {e}")
-            self.last_canvas_size = (400, 300)
+            logger.error(f"Unexpected error updating button: {e}")
     
-    def _on_canvas_resize(self, event):
-        """Handle canvas resize events for automatic rescaling."""
+    def _safe_label_update(self, label, **kwargs):
+        """Safely update label properties with validation."""
         try:
-            # Only handle resize events for the canvas itself, not child widgets
-            if event.widget != self.screen_canvas:
-                return
-            
-            new_width = event.width
-            new_height = event.height
-            
-            # Check if size actually changed significantly (avoid minor fluctuations)
-            old_width, old_height = self.last_canvas_size
-            width_change = abs(new_width - old_width)
-            height_change = abs(new_height - old_height)
-            
-            if width_change > 5 or height_change > 5:  # Only rescale for significant changes
-                logger.info(f"Canvas resized from {old_width}x{old_height} to {new_width}x{new_height}")
-                
-                # Update stored size
-                self.last_canvas_size = (new_width, new_height)
-                
-                # If we have current frame data, rescale it
-                if self.current_frame_data and self.current_presenter:
-                    logger.info("Rescaling current frame for new canvas size")
-                    self.display_screen_frame(self.current_frame_data, self.current_presenter)
-                
+            if label and label.winfo_exists():
+                label.config(**kwargs)
+            else:
+                logger.warning("Attempted to update non-existent label")
+        except tk.TclError as e:
+            logger.error(f"Tkinter error updating label: {e}")
         except Exception as e:
-            logger.error(f"Error handling canvas resize: {e}")
-    
+            logger.error(f"Unexpected error updating label: {e}")
+
     def set_screen_share_callback(self, callback: Callable[[bool], None]):
         """Set callback for screen sharing toggle events."""
         self.screen_share_callback = callback
@@ -624,30 +610,6 @@ class ScreenShareFrame(ModuleFrame):
             except:
                 pass
     
-    def _safe_button_update(self, button, **kwargs):
-        """Safely update button properties with validation."""
-        try:
-            if button and button.winfo_exists():
-                button.config(**kwargs)
-            else:
-                logger.warning("Attempted to update non-existent button")
-        except tk.TclError as e:
-            logger.error(f"Tkinter error updating button: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error updating button: {e}")
-    
-    def _safe_label_update(self, label, **kwargs):
-        """Safely update label properties with validation."""
-        try:
-            if label and label.winfo_exists():
-                label.config(**kwargs)
-            else:
-                logger.warning("Attempted to update non-existent label")
-        except tk.TclError as e:
-            logger.error(f"Tkinter error updating label: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error updating label: {e}")
-    
     def _reset_presenter_request_timeout(self):
         """Reset presenter request button after timeout."""
         if self.share_button.cget('text') == "Requesting...":
@@ -687,30 +649,263 @@ class ScreenShareFrame(ModuleFrame):
                 self._safe_label_update(self.screen_label, text="No screen sharing active")
     
     def set_sharing_status(self, is_sharing: bool):
-        """Set sharing status."""
+        """Update screen sharing status with proper status messages."""
         self.is_sharing = is_sharing
+        self.enabled = is_sharing
         self._update_status_indicator()
         
         if is_sharing:
-            self._safe_button_update(self.share_button, state='normal', text="Stop Screen Share")
-            self._safe_label_update(self.sharing_status, text="Sharing your screen", foreground='green')
+            self._safe_button_update(self.share_button, text="Stop Screen Share", state='normal')
+            # Show "You are sharing" when local screen sharing is active
+            self._safe_label_update(self.sharing_status, text="You are sharing", foreground='green')
+            self.screen_label.pack_forget()
+            self.screen_canvas.pack(fill='both', expand=True)
         else:
-            self._safe_button_update(self.share_button, state='normal', text="Request Presenter Role")
+            self._safe_button_update(self.share_button, text="Start Screen Share", state='normal')
+            # Reset status to "Ready to share" when screen sharing stops
             self._safe_label_update(self.sharing_status, text="Ready to share", foreground='black')
-    
+            self.screen_canvas.pack_forget()
+            self.screen_label.pack(expand=True)
+            
+            if self.current_presenter_name:
+                self._safe_label_update(self.screen_label, text=f"{self.current_presenter_name} is sharing")
+            else:
+                self._safe_label_update(self.screen_label, text="No screen sharing active")
+
     def display_screen_frame(self, frame_data, presenter_name: str):
-        """Display screen frame from presenter."""
+        """Display a screen frame from the presenter with improved scaling and centering."""
         try:
-            # Store current frame data for rescaling
+            # Handle None frame data (black screen when presenter stops)
+            if frame_data is None:
+                self._show_black_screen()
+                return
+                
+            import io
+            from PIL import Image, ImageTk
+            
+            # Store current frame data for rescaling when canvas size changes
             self._store_current_frame(frame_data, presenter_name)
             
-            # Implementation would go here for displaying the actual screen frame
-            # This is a placeholder for the screen sharing display logic
-            pass
+            # Update presenter info
+            if self.current_presenter_name != presenter_name:
+                self.update_presenter(presenter_name)
+                logger.info(f"Now receiving screen from {presenter_name}")
+            
+            # Convert frame data to PIL Image
+            image = Image.open(io.BytesIO(frame_data))
+            
+            # Show canvas first to ensure it's visible
+            if not self.screen_canvas.winfo_viewable():
+                self.screen_label.pack_forget()
+                self.screen_canvas.pack(fill='both', expand=True)
+            
+            # Force canvas to update its size and ensure it's ready
+            self.screen_canvas.update_idletasks()
+            
+            # Get canvas dimensions with fallback values
+            canvas_width = self.screen_canvas.winfo_width()
+            canvas_height = self.screen_canvas.winfo_height()
+            
+            # Use fallback dimensions if canvas is not properly initialized
+            if canvas_width <= 10 or canvas_height <= 10:
+                canvas_width = max(canvas_width, 400)  # Fallback minimum width
+                canvas_height = max(canvas_height, 300)  # Fallback minimum height
+                logger.info(f"Using fallback canvas dimensions: {canvas_width}x{canvas_height}")
+            
+            logger.info(f"Canvas size: {canvas_width}x{canvas_height}, Image size: {image.size}")
+            
+            # Calculate proper aspect ratio scaling to prevent distortion
+            img_width, img_height = image.size
+            if img_width <= 0 or img_height <= 0:
+                logger.error("Invalid image dimensions")
+                return
+            
+            # Calculate scale factors for both dimensions
+            scale_w = canvas_width / img_width
+            scale_h = canvas_height / img_height
+            
+            # Use the smaller scale to fit within canvas while maintaining aspect ratio
+            scale = min(scale_w, scale_h)
+            
+            # Apply minimum scale factor to prevent tiny images (at least 20% of original)
+            scale = max(scale, 0.2)
+            
+            # Calculate new dimensions
+            new_width = int(img_width * scale)
+            new_height = int(img_height * scale)
+            
+            # Ensure minimum visible size
+            new_width = max(new_width, 100)
+            new_height = max(new_height, 75)
+            
+            logger.info(f"Scaling image from {img_width}x{img_height} to {new_width}x{new_height} (scale: {scale:.2f})")
+            
+            # Resize image with high quality resampling
+            image = image.resize((new_width, new_height), Image.LANCZOS)
+            
+            # Convert to PhotoImage for tkinter
+            photo = ImageTk.PhotoImage(image)
+            
+            # Clear canvas completely
+            self.screen_canvas.delete("all")
+            
+            # Center the image in the canvas to remove black space
+            x = (canvas_width - new_width) // 2
+            y = (canvas_height - new_height) // 2
+            
+            # Ensure centering coordinates are not negative
+            x = max(0, x)
+            y = max(0, y)
+            
+            # Create image on canvas at centered position
+            self.screen_canvas.create_image(x, y, anchor='nw', image=photo)
+            
+            # Keep a reference to prevent garbage collection
+            self.screen_canvas.image = photo
+            
+            logger.info(f"Image displayed at centered position ({x}, {y})")
             
         except Exception as e:
             logger.error(f"Error displaying screen frame: {e}")
+            # Show error message to user
+            if hasattr(self, 'screen_label'):
+                self._safe_label_update(self.screen_label, text=f"Error displaying screen from {presenter_name}")
+                if not self.screen_label.winfo_viewable():
+                    self.screen_canvas.pack_forget()
+                    self.screen_label.pack(expand=True)
     
+    def _initialize_canvas(self):
+        """Initialize canvas with proper size detection and fallback values."""
+        try:
+            # Force initial update to get proper dimensions
+            self.screen_canvas.update_idletasks()
+            
+            # Get initial canvas size
+            width = self.screen_canvas.winfo_width()
+            height = self.screen_canvas.winfo_height()
+            
+            # Set fallback dimensions if canvas is not properly initialized
+            if width <= 1 or height <= 1:
+                # Use parent frame dimensions as fallback
+                parent_width = self.screen_display.winfo_width()
+                parent_height = self.screen_display.winfo_height()
+                
+                if parent_width > 1 and parent_height > 1:
+                    width = max(parent_width - 10, 400)  # Account for padding
+                    height = max(parent_height - 10, 300)
+                else:
+                    # Ultimate fallback dimensions
+                    width = 400
+                    height = 300
+                
+                logger.info(f"Canvas initialized with fallback dimensions: {width}x{height}")
+            else:
+                logger.info(f"Canvas initialized with actual dimensions: {width}x{height}")
+            
+            # Store initial size
+            self.last_canvas_size = (width, height)
+            
+        except Exception as e:
+            logger.error(f"Error initializing canvas: {e}")
+            # Set safe fallback dimensions
+            self.last_canvas_size = (400, 300)
+    
+    def _on_canvas_resize(self, event):
+        """Handle canvas resize events for automatic rescaling."""
+        try:
+            # Only handle resize events for the canvas itself, not child widgets
+            if event.widget != self.screen_canvas:
+                return
+            
+            new_width = event.width
+            new_height = event.height
+            
+            # Check if size actually changed significantly (avoid minor fluctuations)
+            old_width, old_height = self.last_canvas_size
+            width_change = abs(new_width - old_width)
+            height_change = abs(new_height - old_height)
+            
+            if width_change > 5 or height_change > 5:  # Only rescale for significant changes
+                logger.info(f"Canvas resized from {old_width}x{old_height} to {new_width}x{new_height}")
+                
+                # Update stored size
+                self.last_canvas_size = (new_width, new_height)
+                
+                # If we have current frame data, rescale it
+                if self.current_frame_data and self.current_presenter:
+                    logger.info("Rescaling current frame for new canvas size")
+                    self.display_screen_frame(self.current_frame_data, self.current_presenter)
+                
+        except Exception as e:
+            logger.error(f"Error handling canvas resize: {e}")
+
+    def reset_screen_sharing_button(self):
+        """Reset screen sharing button to initial state."""
+        try:
+            self._safe_button_update(self.share_button, state='normal', text="Request Presenter Role")
+            self._safe_label_update(self.sharing_status, text="Ready to request presenter role", foreground='black')
+            self.is_sharing = False
+            logger.info("Screen sharing button reset to initial state")
+        except Exception as e:
+            logger.error(f"Error resetting screen sharing button: {e}")
+
+    def _show_black_screen(self):
+        """Show black screen when presenter stops sharing."""
+        try:
+            # Clear canvas and show black screen
+            self.screen_canvas.delete("all")
+            self.screen_canvas.config(bg='black')
+            
+            # Show "No screen sharing" message
+            self.screen_canvas.create_text(
+                self.screen_canvas.winfo_width() // 2,
+                self.screen_canvas.winfo_height() // 2,
+                text="No screen sharing active",
+                fill="white",
+                font=("Arial", 12)
+            )
+            
+            # Update status
+            self._safe_label_update(self.screen_label, text="No screen sharing active")
+            self.current_presenter_name = None
+            
+            logger.info("Displaying black screen - screen sharing stopped")
+            
+        except Exception as e:
+            logger.error(f"Error showing black screen: {e}")
+
+    def cleanup_gui_elements(self):
+        """Safely cleanup GUI elements to prevent tkinter errors."""
+        try:
+            # Reset button state safely
+            if hasattr(self, 'share_button') and self.share_button:
+                try:
+                    if self.share_button.winfo_exists():
+                        self.share_button.config(state='disabled')
+                except tk.TclError:
+                    pass  # Button already destroyed
+            
+            # Reset status label safely
+            if hasattr(self, 'sharing_status') and self.sharing_status:
+                try:
+                    if self.sharing_status.winfo_exists():
+                        self.sharing_status.config(text="Disconnected", foreground='red')
+                except tk.TclError:
+                    pass  # Label already destroyed
+            
+            # Clear canvas safely
+            if hasattr(self, 'screen_canvas') and self.screen_canvas:
+                try:
+                    if self.screen_canvas.winfo_exists():
+                        self.screen_canvas.delete("all")
+                except tk.TclError:
+                    pass  # Canvas already destroyed
+            
+            logger.info("GUI elements cleaned up safely")
+        
+        except Exception as e:
+            logger.error(f"Error during GUI cleanup: {e}")
+
     def _store_current_frame(self, frame_data, presenter_name: str):
         """Store current frame data for rescaling when canvas size changes."""
         self.current_frame_data = frame_data
@@ -1427,24 +1622,27 @@ class TabbedGUIManager:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill='both', expand=True, padx=10, pady=5)
         
-        # Tab 1: Media (Video, Audio, Screen Sharing)
+        # Tab 1: Video & Audio (Video conferencing and audio controls)
         self._create_media_tab()
         
-        # Tab 2: Chat
+        # Tab 2: Screen Share (Dedicated screen sharing section)
+        self._create_screen_share_tab()
+        
+        # Tab 3: Chat
         self._create_chat_tab()
         
-        # Tab 3: Files
+        # Tab 4: Files
         self._create_files_tab()
     
     def _create_media_tab(self):
-        """Create the Media tab with video, audio, and screen sharing."""
+        """Create the Video & Audio tab with video conferencing and audio controls."""
         media_frame = ttk.Frame(self.notebook)
-        self.notebook.add(media_frame, text="🎥 Media & Screen Share")
+        self.notebook.add(media_frame, text="🎥 Video & Audio")
         
         # Configure grid weights
         media_frame.rowconfigure(0, weight=1)
         media_frame.columnconfigure(0, weight=2)  # Video gets more space
-        media_frame.columnconfigure(1, weight=1)  # Right panel
+        media_frame.columnconfigure(1, weight=1)  # Right panel for participants
         
         # Left side: Video conferencing (larger area)
         video_container = ttk.Frame(media_frame)
@@ -1459,19 +1657,22 @@ class TabbedGUIManager:
         self.audio_frame = AudioFrame(video_container)
         self.audio_frame.grid(row=1, column=0, sticky='ew')
         
-        # Right side: Screen sharing and participants
-        right_panel = ttk.Frame(media_frame)
-        right_panel.grid(row=0, column=1, sticky='nsew', padx=(5, 0))
-        right_panel.rowconfigure(0, weight=1)  # Screen share gets most space
-        right_panel.columnconfigure(0, weight=1)
+        # Right side: Participants only
+        self.participant_frame = ParticipantListFrame(media_frame)
+        self.participant_frame.grid(row=0, column=1, sticky='nsew', padx=(5, 0))
+    
+    def _create_screen_share_tab(self):
+        """Create the dedicated Screen Share tab."""
+        screen_share_container = ttk.Frame(self.notebook)
+        self.notebook.add(screen_share_container, text="🖥️ Screen Share")
         
-        # Screen sharing (top of right panel)
-        self.screen_share_frame = ScreenShareFrame(right_panel)
-        self.screen_share_frame.grid(row=0, column=0, sticky='nsew', pady=(0, 5))
+        # Configure for full expansion
+        screen_share_container.rowconfigure(0, weight=1)
+        screen_share_container.columnconfigure(0, weight=1)
         
-        # Participants (bottom of right panel)
-        self.participant_frame = ParticipantListFrame(right_panel)
-        self.participant_frame.grid(row=1, column=0, sticky='ew')
+        # Screen share frame takes the full tab with more space
+        self.screen_share_frame = ScreenShareFrame(screen_share_container)
+        self.screen_share_frame.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
     
     def _create_chat_tab(self):
         """Create the Chat tab."""
@@ -1692,6 +1893,22 @@ class TabbedGUIManager:
         """Set presenter status."""
         if self.screen_share_frame:
             self.screen_share_frame.set_presenter_status(is_presenter, presenter_name)
+    
+    # Screen sharing status methods (for compatibility with screen_manager.py)
+    def set_screen_sharing_status(self, is_sharing: bool):
+        """Set screen sharing active status."""
+        if self.screen_share_frame:
+            self.screen_share_frame.set_sharing_status(is_sharing)
+    
+    def reset_screen_sharing_button(self):
+        """Reset screen sharing button to initial state."""
+        if self.screen_share_frame:
+            self.screen_share_frame.reset_screen_sharing_button()
+    
+    def cleanup_gui_elements(self):
+        """Safely cleanup GUI elements to prevent tkinter errors."""
+        if self.screen_share_frame:
+            self.screen_share_frame.cleanup_gui_elements()
 
 
 # For backward compatibility, create an alias
