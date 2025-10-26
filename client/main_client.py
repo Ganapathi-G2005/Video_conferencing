@@ -691,7 +691,7 @@ class CollaborationClient:
             if self.connection_manager:
                 participants = self.connection_manager.get_participants()
                 participant = participants.get(presenter_id, {})
-                presenter_name = participant.get('username', f"Client {presenter_id}")
+                presenter_name = participant.get('username', f"User {presenter_id[-4:]}")  # Show last 4 chars instead of full client ID
             
             # Add presenter name to message data for screen manager
             if 'data' not in message.__dict__ or message.data is None:
@@ -718,7 +718,7 @@ class CollaborationClient:
             if self.connection_manager:
                 participants = self.connection_manager.get_participants()
                 participant = participants.get(presenter_id, {})
-                presenter_name = participant.get('username', f"Client {presenter_id}")
+                presenter_name = participant.get('username', f"User {presenter_id[-4:]}")  # Show last 4 chars instead of full client ID
             
             if self.screen_manager:
                 self.screen_manager.handle_screen_share_message(message)

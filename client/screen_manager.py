@@ -418,7 +418,7 @@ class ScreenManager:
                 # Someone started screen sharing
                 try:
                     presenter_id = message.sender_id
-                    presenter_name = message.data.get('presenter_name', f"Client {presenter_id}") if message.data else f"Client {presenter_id}"
+                    presenter_name = message.data.get('presenter_name', f"User {presenter_id[-4:]}") if message.data else f"User {presenter_id[-4:]}"
                     
                     if self.gui_manager:
                         # Update presenter info and status message
@@ -524,7 +524,7 @@ class ScreenManager:
             # Update GUI with presenter change
             if self.gui_manager:
                 try:
-                    presenter_name = f"Client {presenter_id}" if presenter_id else None
+                    presenter_name = f"User {presenter_id[-4:]}" if presenter_id else None
                     self.gui_manager.update_screen_sharing_presenter(presenter_name)
                     logger.info(f"Updated presenter to: {presenter_name}")
                 except Exception as gui_error:
