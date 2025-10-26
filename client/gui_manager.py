@@ -77,7 +77,7 @@ class VideoFrame(ModuleFrame):
         
         # Large video display area with grid layout
         self.video_display = tk.Frame(self, bg='#2c2c2c')
-        self.video_display.pack(fill='both', expand=True, padx=5, pady=5)
+        self.video_display.pack(fill='both', expand=True, padx=2, pady=2)
         
         # Configure grid for responsive video layout
         for i in range(2):  # 2x2 grid for up to 4 participants
@@ -118,7 +118,7 @@ class VideoFrame(ModuleFrame):
         
         for i, (row, col) in enumerate(positions):
             slot_frame = tk.Frame(self.video_display, bg='black', relief='solid', borderwidth=1)
-            slot_frame.grid(row=row, column=col, sticky='nsew', padx=2, pady=2)
+            slot_frame.grid(row=row, column=col, sticky='nsew', padx=1, pady=1)
             
             # Placeholder content
             slot_text = "Your Video\n(Enable video)" if i == 0 else f"Video Slot {i+1}\nNo participant"
@@ -224,7 +224,7 @@ class VideoFrame(ModuleFrame):
             logger.error(f"Safe local video update error: {e}")
     
     def _create_stable_video_display(self, parent_frame, frame, client_id: str):
-        """Create stable video display without destroying widgets unnecessarily."""
+        """Create stable video display that fills the individual slot completely."""
         try:
             import cv2
             from PIL import Image, ImageTk
@@ -233,8 +233,46 @@ class VideoFrame(ModuleFrame):
             if frame is not None and frame.size > 0:
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 pil_image = Image.fromarray(rgb_frame)
-                display_size = (320, 240)  # 80% slot coverage
-                pil_image = pil_image.resize(display_size, Image.LANCZOS)
+                
+                # Get actual slot dimensions - ensure we're working with the individual slot
+                parent_frame.update_idletasks()
+                slot_width = parent_frame.winfo_width()
+                slot_height = parent_frame.winfo_height()
+                
+                # Account for border and padding - reduce by border width
+                effective_width = max(slot_width - 4, 100)  # Account for 2px border on each side
+                effective_height = max(slot_height - 4, 100)  # Account for 2px border on each side
+                
+                # Use fallback dimensions if slot not yet sized
+                if effective_width <= 10 or effective_height <= 10:
+                    effective_width = 300
+                    effective_height = 225
+                
+                # Calculate aspect ratios
+                video_aspect = pil_image.width / pil_image.height
+                slot_aspect = effective_width / effective_height
+                
+                # Resize to fill the effective slot area while maintaining aspect ratio
+                if video_aspect > slot_aspect:
+                    # Video is wider - fit to slot height, crop width if needed
+                    new_height = effective_height
+                    new_width = int(new_height * video_aspect)
+                else:
+                    # Video is taller - fit to slot width, crop height if needed
+                    new_width = effective_width
+                    new_height = int(new_width / video_aspect)
+                
+                # Resize the image
+                pil_image = pil_image.resize((new_width, new_height), Image.LANCZOS)
+                
+                # Crop to exact effective slot size if needed (center crop)
+                if new_width > effective_width or new_height > effective_height:
+                    left = max(0, (new_width - effective_width) // 2)
+                    top = max(0, (new_height - effective_height) // 2)
+                    right = left + effective_width
+                    bottom = top + effective_height
+                    pil_image = pil_image.crop((left, top, right, bottom))
+                
                 photo = ImageTk.PhotoImage(pil_image)
                 
                 # Find existing video widget or create new one
@@ -254,21 +292,23 @@ class VideoFrame(ModuleFrame):
                             if 'Video Slot' in child.cget('text') or 'Enable video' in child.cget('text'):
                                 child.destroy()
                     
-                    # Create video widget
-                    video_widget = tk.Label(parent_frame, image=photo, bg='black')
-                    video_widget.pack(fill='both', expand=True)
+                    # Create video widget that fills the slot with minimal padding for containment
+                    video_widget = tk.Label(parent_frame, image=photo, bg='black', bd=0, highlightthickness=0)
+                    video_widget.pack(fill='both', expand=True, padx=2, pady=2)
                     video_widget.image = photo
                     
-                    # Create name label
+                    # Create name label overlay (positioned at bottom)
                     name_text = "You (Local)" if client_id == 'local' else f"Client {client_id[:8]}"
                     name_label = tk.Label(
                         parent_frame,
                         text=name_text,
                         fg='lightgreen' if client_id == 'local' else 'lightblue',
-                        bg='black',
-                        font=('Arial', 8)
+                        bg='#000000',  # Black background
+                        font=('Arial', 8, 'bold'),
+                        bd=0,
+                        highlightthickness=0
                     )
-                    name_label.pack(side='bottom')
+                    name_label.pack(side='bottom', fill='x', padx=2, pady=1)
                     
         except Exception as e:
             logger.error(f"Error creating stable video display for {client_id}: {e}")

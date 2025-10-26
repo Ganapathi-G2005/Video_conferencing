@@ -133,7 +133,7 @@ class UltraStableVideoWidget:
             return False
     
     def _prepare_frame(self, frame: np.ndarray) -> Optional[ImageTk.PhotoImage]:
-        """Prepare frame for display with error handling."""
+        """Prepare frame for display with error handling - fills individual slot properly."""
         try:
             if frame is None or frame.size == 0:
                 return None
@@ -144,9 +144,44 @@ class UltraStableVideoWidget:
             # Convert to PIL Image
             pil_image = Image.fromarray(rgb_frame)
             
-            # Resize for display - 80% slot coverage
-            display_size = (320, 240)
-            pil_image = pil_image.resize(display_size, Image.LANCZOS)
+            # Get actual slot dimensions
+            self.parent_frame.update_idletasks()
+            slot_width = self.parent_frame.winfo_width()
+            slot_height = self.parent_frame.winfo_height()
+            
+            # Account for border and padding - reduce by border width
+            effective_width = max(slot_width - 6, 100)  # Account for borders and padding
+            effective_height = max(slot_height - 6, 100)  # Account for borders and padding
+            
+            # Use fallback dimensions if slot not yet sized
+            if effective_width <= 10 or effective_height <= 10:
+                effective_width = 300
+                effective_height = 225
+            
+            # Calculate aspect ratios
+            video_aspect = pil_image.width / pil_image.height
+            slot_aspect = effective_width / effective_height
+            
+            # Resize to fill the effective slot area while maintaining aspect ratio
+            if video_aspect > slot_aspect:
+                # Video is wider - fit to slot height, crop width if needed
+                new_height = effective_height
+                new_width = int(new_height * video_aspect)
+            else:
+                # Video is taller - fit to slot width, crop height if needed
+                new_width = effective_width
+                new_height = int(new_width / video_aspect)
+            
+            # Resize the image
+            pil_image = pil_image.resize((new_width, new_height), Image.LANCZOS)
+            
+            # Crop to exact effective slot size if needed (center crop)
+            if new_width > effective_width or new_height > effective_height:
+                left = max(0, (new_width - effective_width) // 2)
+                top = max(0, (new_height - effective_height) // 2)
+                right = left + effective_width
+                bottom = top + effective_height
+                pil_image = pil_image.crop((left, top, right, bottom))
             
             # Convert to PhotoImage
             photo = ImageTk.PhotoImage(pil_image)

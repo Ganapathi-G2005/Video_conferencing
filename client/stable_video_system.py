@@ -175,7 +175,7 @@ class StableVideoRenderer:
                 return False
             
             # Convert frame to display format
-            display_image = self._prepare_display_image(frame)
+            display_image = self._prepare_display_image(frame, slot['frame'])
             if display_image is None:
                 return False
             
@@ -239,8 +239,8 @@ class StableVideoRenderer:
             logger.error(f"Error creating video widget for {client_id}: {e}")
             return None
     
-    def _prepare_display_image(self, frame: np.ndarray) -> Optional[ImageTk.PhotoImage]:
-        """Prepare frame for display with error handling."""
+    def _prepare_display_image(self, frame: np.ndarray, parent_frame=None) -> Optional[ImageTk.PhotoImage]:
+        """Prepare frame for display with error handling - fills individual slot properly."""
         try:
             if frame is None or frame.size == 0:
                 return None
@@ -251,9 +251,54 @@ class StableVideoRenderer:
             # Convert to PIL Image
             pil_image = Image.fromarray(rgb_frame)
             
-            # Resize with high quality for stability - 80% slot coverage
-            display_size = (320, 240)
-            pil_image = pil_image.resize(display_size, Image.LANCZOS)
+            # Get actual slot dimensions if parent frame provided
+            slot_width = 400
+            slot_height = 300
+            
+            if parent_frame:
+                try:
+                    parent_frame.update_idletasks()
+                    slot_width = parent_frame.winfo_width()
+                    slot_height = parent_frame.winfo_height()
+                    
+                    # Account for border and padding - reduce by border width
+                    effective_width = max(slot_width - 6, 100)  # Account for borders and padding
+                    effective_height = max(slot_height - 6, 100)  # Account for borders and padding
+                    
+                    # Use fallback dimensions if slot not yet sized
+                    if effective_width <= 10 or effective_height <= 10:
+                        effective_width = 300
+                        effective_height = 225
+                    
+                    slot_width = effective_width
+                    slot_height = effective_height
+                except:
+                    pass  # Use fallback dimensions
+            
+            # Calculate aspect ratios
+            video_aspect = pil_image.width / pil_image.height
+            slot_aspect = slot_width / slot_height
+            
+            # Resize to fill the effective slot area while maintaining aspect ratio
+            if video_aspect > slot_aspect:
+                # Video is wider - fit to slot height, crop width if needed
+                new_height = slot_height
+                new_width = int(new_height * video_aspect)
+            else:
+                # Video is taller - fit to slot width, crop height if needed
+                new_width = slot_width
+                new_height = int(new_width / video_aspect)
+            
+            # Resize the image
+            pil_image = pil_image.resize((new_width, new_height), Image.LANCZOS)
+            
+            # Crop to exact slot size if needed (center crop)
+            if new_width > slot_width or new_height > slot_height:
+                left = max(0, (new_width - slot_width) // 2)
+                top = max(0, (new_height - slot_height) // 2)
+                right = left + slot_width
+                bottom = top + slot_height
+                pil_image = pil_image.crop((left, top, right, bottom))
             
             # Convert to PhotoImage
             photo = ImageTk.PhotoImage(pil_image)
